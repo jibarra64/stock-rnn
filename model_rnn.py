@@ -22,7 +22,8 @@ class LstmRNN(object):
                  input_size=1,
                  embed_size=None,
                  logs_dir="logs",
-                 plots_dir="images"):
+                 plots_dir="images",
+                 days_to_plot=200):
         """
         Construct a RNN model using LSTM cell.
 
@@ -50,7 +51,8 @@ class LstmRNN(object):
 
         self.logs_dir = logs_dir
         self.plots_dir = plots_dir
-
+        self.days_to_plot = days_to_plot
+    
         self.build_graph()
 
     def build_graph(self):
@@ -231,7 +233,7 @@ class LstmRNN(object):
                         [self.loss, self.optim, self.merged_sum], train_data_feed)
                     self.writer.add_summary(train_merged_sum, global_step=global_step)
 
-                    if np.mod(global_step, len(dataset_list) * 200 / config.input_size) == 1:
+                    if np.mod(global_step, len(dataset_list) * self.days_to_plot / config.input_size) == 1:
                         test_loss, test_pred = self.sess.run([self.loss_test, self.pred], test_data_feed)
 
                         print "Step:%d [Epoch:%d] [Learning rate: %.6f] train_loss:%.6f test_loss:%.6f" % (
@@ -246,7 +248,30 @@ class LstmRNN(object):
                             self.plot_samples(sample_preds, sample_truth, image_path, stock_sym=sample_sym)
 
                         self.save(global_step)
-
+            
+                        agree_neg = 0
+                        agree_pos = 0
+                        disagree = 0
+                        for i, truth in enumerate(sample_truth):
+                            if (i >= 1):
+                                truth_change = sample_truth[i][0] - sample_truth[i-1][0]
+                                preds_change = sample_preds[i][0] - sample_preds[i-1][0]
+                              
+                                if (i == 1): 
+                                    print "sample truth", sample_truth[i]
+                                    print "sample preds", sample_preds[i] 
+                                    print "truth_change", truth_change, "preds:", preds_change
+                                if (truth_change > 0 and preds_change > 0):
+                                    agree_pos = agree_pos + 1
+                                elif (truth_change < 0 and preds_change < 0):
+                                    agree_neg = agree_neg + 1
+                                else:
+                                    disagree = disagree + 1
+                        total = (agree_pos + agree_neg + disagree)
+                        print "total: ", total
+                        print "agree_pos: ", float(agree_pos) / total
+                        print "agree_neg: ", float(agree_neg) / total
+                        print "correct:", float(agree_pos + agree_neg) / float(agree_pos + agree_neg + disagree)              
         final_pred, final_loss = self.sess.run([self.pred, self.loss], test_data_feed)
 
         # Save the final model
@@ -299,13 +324,19 @@ class LstmRNN(object):
             print(" [*] Failed to find a checkpoint")
             return False, 0
 
-    def plot_samples(self, preds, targets, figname, stock_sym=None, multiplier=5):
+    #def plot_samples(self, preds, targets, figname, stock_sym=None, multiplier=5):
+    def plot_samples(self, preds, targets, figname, stock_sym=None, multiplier=1):
         def _flatten(seq):
-            return np.array([x for y in seq for x in y])
+            #return np.array([x for y in seq for x in y])
+            return np.array([item[0] for item in seq])
+            #for x in seq:
+            #return [1] 
 
-        truths = _flatten(targets)[-200:]
-        preds = (_flatten(preds) * multiplier)[-200:]
-        days = range(len(truths))[-200:]
+        #print targets
+        #print "flatten", _flatten(targets)
+        truths = _flatten(targets)[-self.days_to_plot:]
+        preds = (_flatten(preds) * multiplier)[-self.days_to_plot:]
+        days = range(len(truths))[-self.days_to_plot:]
 
         plt.figure(figsize=(12, 6))
         plt.plot(days, truths, label='truth')
@@ -313,7 +344,7 @@ class LstmRNN(object):
         plt.legend(loc='upper left', frameon=False)
         plt.xlabel("day")
         plt.ylabel("normalized price")
-        plt.ylim((min(truths), max(truths)))
+        #plt.ylim((min(truths), max(truths)))
         plt.grid(ls='--')
 
         if stock_sym:

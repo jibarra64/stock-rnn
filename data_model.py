@@ -26,10 +26,11 @@ class StockDataSet(object):
         raw_df = pd.read_csv(os.path.join("data", "%s.csv" % stock_sym))
 
         # Merge into one sequence
-        if close_price_only:
-            self.raw_seq = raw_df['Close'].tolist()
-        else:
-            self.raw_seq = [price for tup in raw_df[['Open', 'Close']].values for price in tup]
+        #if close_price_only:
+        #self.raw_seq = raw_df['Close'].tolist()
+        #else:
+        self.raw_seq = [price for tup in raw_df[['Open', 'Close']].values for price in tup]
+        #self.raw_seq = [price for tup in raw_df[['Open', 'Volume']].values for price in tup]
 
         self.raw_seq = np.array(self.raw_seq)
         self.train_X, self.train_y, self.test_X, self.test_y = self._prepare_data(self.raw_seq)
@@ -44,8 +45,18 @@ class StockDataSet(object):
                for i in range(len(seq) // self.input_size)]
 
         if self.normalized:
-            seq = [seq[0] / seq[0][0] - 1.0] + [
-                curr / seq[i][-1] - 1.0 for i, curr in enumerate(seq[1:])]
+            #seq = [seq[0] / seq[0][0] - 1.0] + [curr / seq[i][-1] - 1.0 for i, curr in enumerate(seq[1:])]
+            mu = np.mean(seq, axis=0)
+            max = np.amax(seq, axis=0)
+            min = np.amin(seq, axis=0)
+            sig = np.std(seq, axis=0)
+            # mean normalized
+            #seq = np.subtract(np.divide(np.subtract(seq, mu), np.subtract(max, min)), 1)
+            # standardization
+            seq = np.divide(np.subtract(seq, mu), sig)
+            #seq = [(cur - mu) / sig for cur in seq]
+            print "mu:", mu, "sig:", sig
+            print seq
 
         # split into groups of num_steps
         X = np.array([seq[i: i + self.num_steps] for i in range(len(seq) - self.num_steps)])
